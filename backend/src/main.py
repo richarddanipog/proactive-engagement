@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from .settings import settings
 from .schemas import Event, DecisionRequest, DecisionResponse
+from .llm_client import analyze_session_with_openai
 
 
 app = FastAPI(title="Proactive Engagement Backend",
@@ -30,18 +31,19 @@ def ingest_event(event: Event):
 @app.post("/decide", response_model=DecisionResponse)
 def decide(req: DecisionRequest):
     session = req.session
-
-    should = (
-        session.current_page == "product"
-        and session.time_on_site >= 90
-        and session.cart_items == 0
+    print("[DEBUG] Incoming session:", session.dict())
+    # cost gate
+    gate = (
+        (session.current_page in {"product", "cart"})
+        and (session.time_on_site >= 30)
     )
+    print("[DEBUG] Gate passed?", gate)
 
-    if should:
-        return DecisionResponse(
-            should_show=True,
-            message="Still thinking? Here's a quick tip: check reviews below 👇",
-            ttl_seconds=120,
-        )
+    if not gate:
+        return DecisionResponse(should_show=False, message=None, ttl_seconds=0)
+
+    should, msg, ttl = analyze_session_with_openai(session)
+    if should and msg:
+        return DecisionResponse(should_show=True, message=msg, ttl_seconds=ttl)
 
     return DecisionResponse(should_show=False, message=None, ttl_seconds=0)
