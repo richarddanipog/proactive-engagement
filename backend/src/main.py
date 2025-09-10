@@ -28,14 +28,8 @@ def health():
 def decide(req: DecisionRequest):
     session = req.session
     logger.info("Incoming session:", session.dict())
-    # cost gate
-    gate = (
-        (session.current_page in {"product", "cart"})
-        and (session.time_on_site >= 30)
-    )
-    logger.info("Gate passed?", gate)
 
-    if not gate:
+    if session.time_on_site < 20:
         return DecisionResponse(should_show=False, message=None, ttl_seconds=0)
 
     should, msg, ttl = analyze_session_with_openai(session)

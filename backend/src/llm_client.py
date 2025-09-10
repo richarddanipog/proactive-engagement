@@ -68,7 +68,8 @@ def extract_session_insights(session: SessionSnapshot) -> Dict[str, Any]:
     # Intent signals
     signals["purchase_intent"] = (
         "high" if add_to_cart_count > 0 else
-        "medium" if qty_changes > 0 or session.current_page == "cart" else
+        "medium" if qty_changes > 0 or session.current_page in ("cart", "checkout") else
+        "medium" if session.current_page in ("collection", "home") and session.time_on_site >= 60 else
         "exploring" if len(insights["page_views"]) > 1 else
         "low"
     )
@@ -139,14 +140,13 @@ def analyze_session_with_openai(session: SessionSnapshot) -> Tuple[bool, Optiona
 
     system = (
         "You are a conversion optimization assistant for an e-commerce site. "
-        "Analyze the session data including user journey, behavioral signals, and interactions. "
-        "Decide if showing a popup NOW would be helpful (not annoying) and craft a personalized message. "
-        "Rules: "
-        "- Only show popups for high-value moments (cart abandonment, extended browsing, purchase hesitation) "
-        "- Message must be <= 120 chars, helpful tone, no emojis "
-        "- Consider user's current context and journey stage "
-        "- Avoid interrupting active shopping (recent add-to-cart or quantity changes) "
-        "- TTL should be 60-120 seconds based on urgency"
+        "Given a compact session summary (journey, behavioral signals, recent actions), "
+        "YOU must decide whether to show a popup NOW and write a short helpful message.\n\n"
+        "Decide across ALL page types (home, collection, product, cart, checkout).\n"
+        "Show only for meaningful moments (e.g., long dwell with no progress, cart hesitation, repeated filters without add-to-cart).\n"
+        "If you decide to show, craft a concise message (<=120 chars), neutral/helpful, no emojis. "
+        "TTL should be 60–120 seconds.\n\n"
+        "Respond ONLY as JSON: {\"should_show\": boolean, \"message\": string|null, \"ttl_seconds\": number}."
     )
 
     payload = create_enhanced_payload(session)
